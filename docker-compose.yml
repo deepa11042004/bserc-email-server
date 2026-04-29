@@ -1,0 +1,18 @@
+services:
+  api:
+    build: .
+    image: bserc-email-server
+    env_file: .env
+    ports: ["4000:4000"]
+    command: ["node", "dist/server.js"]
+    restart: unless-stopped
+
+  worker:
+    image: bserc-email-server
+    build: .
+    env_file: .env
+    command: ["node", "dist/worker.js"]
+    deploy:
+      replicas: 2
+    restart: unless-stopped
+    depends_on: [api]
