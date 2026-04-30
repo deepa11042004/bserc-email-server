@@ -1,0 +1,150 @@
+{
+  "info": {
+    "name": "BSERC Email Notification API",
+    "_postman_id": "bserc-email-1",
+    "description": "Bulk email platform — templates, campaigns, suppression, webhooks.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000" },
+    { "key": "token", "value": "" },
+    { "key": "templateId", "value": "1" },
+    { "key": "campaignId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        { "name": "Live",  "request": { "method": "GET", "url": "{{baseUrl}}/live" } },
+        { "name": "Ready", "request": { "method": "GET", "url": "{{baseUrl}}/ready" } },
+        { "name": "Health","request": { "method": "GET", "url": "{{baseUrl}}/health" } }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "if (pm.response.code === 200) { pm.collectionVariables.set('token', pm.response.json().token); }"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@bserc.local\",\n  \"password\": \"ChangeMe!2026\"\n}" }
+          }
+        },
+        { "name": "Me", "request": { "method": "GET", "url": "{{baseUrl}}/api/auth/me" } }
+      ]
+    },
+    {
+      "name": "Templates",
+      "item": [
+        { "name": "List",   "request": { "method": "GET", "url": "{{baseUrl}}/api/templates" } },
+        { "name": "Get",    "request": { "method": "GET", "url": "{{baseUrl}}/api/templates/{{templateId}}" } },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/templates",
+            "body": { "mode": "raw", "raw": "{\n  \"templateCode\": \"job_invite\",\n  \"templateName\": \"Job Invite\",\n  \"subject\": \"Interview at {{company_name}}\",\n  \"htmlBody\": \"<p>Hi {{first_name}}, we'd love to interview you.</p>\"\n}" }
+          }
+        },
+        {
+          "name": "Update",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/templates/{{templateId}}",
+            "body": { "mode": "raw", "raw": "{\n  \"subject\": \"Updated subject\"\n}" }
+          }
+        },
+        {
+          "name": "Preview",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/templates/{{templateId}}/preview",
+            "body": { "mode": "raw", "raw": "{\n  \"vars\": { \"company_name\": \"ACME Pvt Ltd\" }\n}" }
+          }
+        },
+        { "name": "Delete (admin)", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/templates/{{templateId}}" } }
+      ]
+    },
+    {
+      "name": "Campaigns",
+      "item": [
+        { "name": "List", "request": { "method": "GET", "url": "{{baseUrl}}/api/campaigns" } },
+        { "name": "Get",  "request": { "method": "GET", "url": "{{baseUrl}}/api/campaigns/{{campaignId}}" } },
+        { "name": "Stats","request": { "method": "GET", "url": "{{baseUrl}}/api/campaigns/{{campaignId}}/stats" } },
+        { "name": "Recipients", "request": { "method": "GET", "url": "{{baseUrl}}/api/campaigns/{{campaignId}}/recipients?limit=100" } },
+        {
+          "name": "Send (API recipients)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/campaigns/send",
+            "body": { "mode": "raw", "raw": "{\n  \"campaignName\": \"Hiring Drive April\",\n  \"templateId\": {{templateId}},\n  \"fromEmail\": \"hr@yourdomain.com\",\n  \"globalVars\": { \"company_name\": \"ACME\" },\n  \"recipients\": [\n    { \"email\": \"john@example.com\", \"firstName\": \"John\", \"lastName\": \"Doe\" }\n  ]\n}" }
+          }
+        },
+        {
+          "name": "Send from DB table",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/campaigns/send-from-db",
+            "body": { "mode": "raw", "raw": "{\n  \"campaignName\": \"Active Leads Blast\",\n  \"templateId\": {{templateId}},\n  \"fromEmail\": \"hr@yourdomain.com\",\n  \"tableName\": \"crm_leads\",\n  \"emailColumn\": \"email\",\n  \"firstNameColumn\": \"fname\",\n  \"lastNameColumn\": \"lname\",\n  \"whereClause\": \"status = 'ACTIVE'\"\n}" }
+          }
+        },
+        {
+          "name": "Send from query (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/campaigns/send-from-query",
+            "body": { "mode": "raw", "raw": "{\n  \"campaignName\": \"Delhi Cohort\",\n  \"templateId\": {{templateId}},\n  \"fromEmail\": \"hr@yourdomain.com\",\n  \"query\": \"SELECT email, fname AS first_name FROM crm_leads WHERE city = 'Delhi'\"\n}" }
+          }
+        },
+        {
+          "name": "Test send",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/campaigns/test-send",
+            "body": { "mode": "raw", "raw": "{\n  \"templateId\": {{templateId}},\n  \"fromEmail\": \"hr@yourdomain.com\",\n  \"toEmail\": \"you@yourdomain.com\",\n  \"vars\": { \"company_name\": \"ACME\", \"first_name\": \"Test\" }\n}" }
+          }
+        },
+        { "name": "Pause",  "request": { "method": "POST", "url": "{{baseUrl}}/api/campaigns/{{campaignId}}/pause" } },
+        { "name": "Resume", "request": { "method": "POST", "url": "{{baseUrl}}/api/campaigns/{{campaignId}}/resume" } },
+        { "name": "Cancel (admin)", "request": { "method": "POST", "url": "{{baseUrl}}/api/campaigns/{{campaignId}}/cancel" } }
+      ]
+    },
+    {
+      "name": "Suppression",
+      "item": [
+        { "name": "List", "request": { "method": "GET", "url": "{{baseUrl}}/api/suppression" } },
+        {
+          "name": "Add",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/suppression",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"unsubbed@example.com\",\n  \"reason\": \"UNSUBSCRIBE\"\n}" }
+          }
+        },
+        { "name": "Remove (admin)", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/suppression/unsubbed@example.com" } }
+      ]
+    }
+  ]
+}

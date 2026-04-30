@@ -20,8 +20,17 @@ const queueUrl = () => {
   return env.SQS_QUEUE_URL;
 };
 
+// In-memory queue used when TEST_NO_AWS=true.
+const inMemQueue: { id: string; body: EmailJob }[] = [];
+export const __testInMemQueue = inMemQueue;
+export const __testDrainQueue = () => inMemQueue.splice(0, inMemQueue.length);
+
 export const enqueueJobs = async (jobs: EmailJob[]) => {
   if (!jobs.length) return 0;
+  if (env.TEST_NO_AWS) {
+    for (const j of jobs) inMemQueue.push({ id: `mem-${j.campaignId}-${j.recipientId}`, body: j });
+    return jobs.length;
+  }
   let sent = 0;
   for (let i = 0; i < jobs.length; i += 10) {
     const chunk = jobs.slice(i, i + 10);

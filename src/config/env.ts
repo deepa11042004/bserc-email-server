@@ -48,6 +48,13 @@ const schema = z.object({
     .transform((v) => v === 'true'),
 
   WEBHOOK_PATH: z.string().default('/api/webhooks/ses'),
+
+  // When TEST_NO_AWS=true, the SES + SQS services short-circuit AWS calls
+  // and produce deterministic fake responses. Used by the test suite.
+  TEST_NO_AWS: z
+    .string()
+    .default('false')
+    .transform((v) => v === 'true'),
 });
 
 const parsed = schema.safeParse(process.env);

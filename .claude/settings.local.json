@@ -3,7 +3,12 @@
     "allow": [
       "Bash(npm install *)",
       "Bash(npm run *)",
-      "Bash(pkill -f \"tsx watch src/server.ts\")"
+      "Bash(pkill -f \"tsx watch src/server.ts\")",
+      "Bash(pkill -f \"tsx watch\")",
+      "Bash(pkill -f \"node dist/server\")",
+      "Bash(pkill -f \"node dist/worker\")",
+      "Bash(node -e \"const m=require\\('mysql2/promise'\\); \\(async\\(\\)=>{try{const c=await m.createConnection\\({host:process.env.APP_DB_HOST,port:Number\\(process.env.APP_DB_PORT\\),user:process.env.APP_DB_USER,password:process.env.APP_DB_PASSWORD,database:process.env.APP_DB_NAME}\\); const [r]=await c.query\\('SELECT COUNT\\(*\\) c FROM users'\\); console.log\\('OK users count:',r[0].c\\); await c.end\\(\\);}catch\\(e\\){console.error\\('ERR',e.message\\);}}\\)\\(\\)\")",
+      "Bash(npm test *)"
     ]
   }
 }

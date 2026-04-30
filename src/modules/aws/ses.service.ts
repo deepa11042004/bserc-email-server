@@ -25,7 +25,15 @@ export class TransientSesError extends Error {
 
 const TRANSIENT_CODES = new Set(['Throttling', 'ThrottlingException', 'ServiceUnavailable']);
 
+let mockSendCount = 0;
+export const __getMockSendCount = () => mockSendCount;
+export const __resetMockSendCount = () => { mockSendCount = 0; };
+
 export const sendOne = async (args: SendArgs): Promise<SendResult> => {
+  if (env.TEST_NO_AWS) {
+    mockSendCount++;
+    return { messageId: `mock-${args.campaignId}-${args.recipientId}-${Date.now()}-${mockSendCount}` };
+  }
   const cmd = new SendEmailCommand({
     Source: args.fromEmail,
     Destination: { ToAddresses: [args.toEmail] },
