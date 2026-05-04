@@ -4,10 +4,13 @@ import { asyncHandler } from '../../common/asyncHandler.js';
 import { validateBody } from '../../common/validate.js';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import {
+  addAttachment,
   createTemplate,
   deleteTemplate,
   getTemplate,
+  listTemplateAttachments,
   listTemplates,
+  removeAttachment,
   updateTemplate,
 } from './templates.service.js';
 import { buildVars, render } from './placeholders.js';
@@ -91,5 +94,40 @@ templatesRouter.post(
       textBody: text?.output ?? null,
       missingPlaceholders: [...new Set([...subject.missing, ...html.missing, ...(text?.missing ?? [])])],
     });
+  })
+);
+
+// ----- Attachment routes -----
+
+const AttachmentBody = z.object({
+  filename: z.string().min(1).max(500),
+  contentType: z.string().min(1).max(255),
+  data: z.string().min(1), // base64
+});
+
+templatesRouter.get(
+  '/:id/attachments',
+  asyncHandler(async (req, res) => {
+    const attachments = await listTemplateAttachments(Number(req.params.id), true);
+    res.json(attachments);
+  })
+);
+
+templatesRouter.post(
+  '/:id/attachments',
+  requireRole('ADMIN', 'OPERATOR'),
+  validateBody(AttachmentBody),
+  asyncHandler(async (req, res) => {
+    const att = await addAttachment(Number(req.params.id), req.body);
+    res.status(201).json(att);
+  })
+);
+
+templatesRouter.delete(
+  '/:id/attachments/:attachmentId',
+  requireRole('ADMIN', 'OPERATOR'),
+  asyncHandler(async (req, res) => {
+    await removeAttachment(Number(req.params.id), Number(req.params.attachmentId));
+    res.status(204).end();
   })
 );

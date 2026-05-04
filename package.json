@@ -22,9 +22,11 @@
     "perf": "TEST_NO_AWS=true NODE_ENV=test LOG_LEVEL=error tsx src/scripts/perf.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1041.0",
     "@aws-sdk/client-ses": "^3.668.0",
     "@aws-sdk/client-sns": "^3.668.0",
     "@aws-sdk/client-sqs": "^3.668.0",
+    "@aws-sdk/s3-request-presigner": "^3.1041.0",
     "@types/swagger-ui-express": "^4.1.8",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

@@ -11,6 +11,7 @@ import { templatesRouter } from './modules/templates/templates.routes.js';
 import { campaignsRouter } from './modules/campaigns/campaigns.routes.js';
 import { suppressionRouter } from './modules/suppression/suppression.routes.js';
 import { adminRouter } from './modules/admin/admin.routes.js';
+import { sendersRouter } from './modules/senders/senders.routes.js';
 import { webhookRouter } from './modules/webhooks/ses.webhook.js';
 import { mountSwagger } from './openapi/swagger.js';
 import { appPool } from './db/pools.js';
@@ -70,6 +71,7 @@ export const buildApp = (): Express => {
   app.use('/api/templates', templatesRouter);
   app.use('/api/campaigns', campaignsRouter);
   app.use('/api/suppression', suppressionRouter);
+  app.use('/api/senders', sendersRouter);
   app.use('/api/admin', adminRouter);
 
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));

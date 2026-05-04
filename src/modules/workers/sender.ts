@@ -6,9 +6,9 @@ import {
   type EmailJob,
   type ReceivedJob,
 } from '../aws/sqs.service.js';
-import { sendOne, TransientSesError } from '../aws/ses.service.js';
+import { sendOne, TransientSesError, type AttachmentData } from '../aws/ses.service.js';
+import { downloadFromS3 } from '../aws/s3.service.js';
 import { buildVars, render } from '../templates/placeholders.js';
-import { isCampaignActive } from '../campaigns/campaigns.service.js';
 import { TokenBucket } from './rateLimiter.js';
 import { env } from '../../config/env.js';
 
@@ -39,6 +39,42 @@ interface TemplateRow {
   subject: string;
   html_body: string;
   text_body: string | null;
+}
+
+interface AttachmentDbRow {
+  id: number;
+  s3_key: string;
+  filename: string;
+  content_type: string;
+}
+
+// Per-worker attachment cache keyed by template_id — downloaded once and reused.
+const attachmentCache = new Map<number, AttachmentData[]>();
+
+async function loadTemplateAttachments(templateId: number): Promise<AttachmentData[]> {
+  if (attachmentCache.has(templateId)) return attachmentCache.get(templateId)!;
+
+  const [rows]: any = await appPool().query(
+    'SELECT id, s3_key, filename, content_type FROM template_attachments WHERE template_id = ?',
+    [templateId]
+  );
+  const dbRows = rows as AttachmentDbRow[];
+
+  const attachments = await Promise.all(
+    dbRows.map(async (r) => {
+      try {
+        const content = await downloadFromS3(r.s3_key);
+        return { filename: r.filename, content, contentType: r.content_type };
+      } catch (e) {
+        logger.warn({ err: e, s3Key: r.s3_key }, 'Could not download template attachment, skipping');
+        return null;
+      }
+    })
+  );
+
+  const valid = attachments.filter((a): a is AttachmentData => a !== null);
+  attachmentCache.set(templateId, valid);
+  return valid;
 }
 
 async function loadJobContext(job: EmailJob) {
@@ -133,36 +169,28 @@ async function processOne(received: ReceivedJob): Promise<void> {
   const { job, receiptHandle } = received;
   const ctx = await loadJobContext(job);
   if (!ctx) {
-    // Unknown job — drop it.
     await deleteJob(receiptHandle);
     return;
   }
   const { recipient, campaign, template } = ctx;
 
-  // Skip if campaign is paused/cancelled. Pause -> leave message in queue (do not delete).
-  if (campaign.status === 'PAUSED') {
-    // Do not delete; visibility will expire and the job comes back.
-    return;
-  }
-  if (campaign.status === 'CANCELLED' || campaign.status === 'COMPLETED' || campaign.status === 'FAILED') {
+  if (campaign.status === 'PAUSED') return;
+  if (['CANCELLED', 'COMPLETED', 'FAILED'].includes(campaign.status)) {
     await deleteJob(receiptHandle);
     return;
   }
 
-  // Already terminal? skip.
   if (['SENT', 'FAILED', 'BOUNCED', 'COMPLAINT', 'SUPPRESSED', 'DELIVERED'].includes(recipient.status)) {
     await deleteJob(receiptHandle);
     return;
   }
 
-  // Last-second suppression check.
   if (await isSuppressed(recipient.email)) {
     await markSuppressedAtSend(recipient.id, campaign.id);
     await deleteJob(receiptHandle);
     return;
   }
 
-  // Render
   const globals =
     campaign.global_vars && typeof campaign.global_vars === 'object'
       ? (campaign.global_vars as Record<string, unknown>)
@@ -180,7 +208,11 @@ async function processOne(received: ReceivedJob): Promise<void> {
   const html = render(template.html_body, vars).output;
   const text = template.text_body ? render(template.text_body, vars).output : null;
 
-  // Throttle
+  // Load attachments from cache (first call downloads from S3, subsequent calls are instant)
+  const attachments = env.AWS_S3_BUCKET
+    ? await loadTemplateAttachments(campaign.template_id)
+    : [];
+
   await limiter.take();
 
   try {
@@ -193,6 +225,7 @@ async function processOne(received: ReceivedJob): Promise<void> {
       replyTo: campaign.reply_to ?? null,
       campaignId: campaign.id,
       recipientId: recipient.id,
+      attachments: attachments.length ? attachments : undefined,
     });
     await markSent(recipient.id, campaign.id, out.messageId);
     await deleteJob(receiptHandle);
@@ -200,7 +233,6 @@ async function processOne(received: ReceivedJob): Promise<void> {
   } catch (e: any) {
     if (e instanceof TransientSesError && recipient.retry_count < MAX_RETRIES) {
       await bumpRetry(recipient.id);
-      // Do not delete the message — let SQS visibility timeout return it.
       logger.warn(
         { recipientId: recipient.id, retry: recipient.retry_count + 1, err: e.message },
         'Transient SES error, will retry'
