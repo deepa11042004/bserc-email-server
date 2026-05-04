@@ -10,6 +10,7 @@ import { authRouter } from './modules/auth/auth.routes.js';
 import { templatesRouter } from './modules/templates/templates.routes.js';
 import { campaignsRouter } from './modules/campaigns/campaigns.routes.js';
 import { suppressionRouter } from './modules/suppression/suppression.routes.js';
+import { adminRouter } from './modules/admin/admin.routes.js';
 import { webhookRouter } from './modules/webhooks/ses.webhook.js';
 import { mountSwagger } from './openapi/swagger.js';
 import { appPool } from './db/pools.js';
@@ -18,7 +19,13 @@ export const buildApp = (): Express => {
   const app = express();
   app.set('trust proxy', 1);
   app.use(helmet({ contentSecurityPolicy: false }));
-  app.use(cors());
+  app.use(
+    cors({
+      origin: env.NODE_ENV === 'production' ? true : '*',
+      credentials: true,
+      exposedHeaders: ['Content-Length'],
+    })
+  );
   app.use(pinoHttp({ logger, autoLogging: env.NODE_ENV !== 'test' }));
 
   // Webhook router uses its own permissive parser; mount before global JSON.
@@ -63,6 +70,7 @@ export const buildApp = (): Express => {
   app.use('/api/templates', templatesRouter);
   app.use('/api/campaigns', campaignsRouter);
   app.use('/api/suppression', suppressionRouter);
+  app.use('/api/admin', adminRouter);
 
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 

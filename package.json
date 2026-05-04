@@ -17,7 +17,7 @@
     "seed:admin": "tsx src/scripts/seed-admin.ts",
     "infra:setup": "tsx src/scripts/aws-setup.ts",
     "lint": "tsc --noEmit",
-    "test": "TEST_NO_AWS=true NODE_ENV=test tsx --test --test-reporter=spec tests/**/*.test.ts",
+    "test": "TEST_NO_AWS=true NODE_ENV=test ALLOW_RAW_QUERY=false tsx --test --test-concurrency=1 --test-reporter=spec tests/**/*.test.ts",
     "seed:test-data": "tsx src/scripts/seed-test-data.ts",
     "perf": "TEST_NO_AWS=true NODE_ENV=test LOG_LEVEL=error tsx src/scripts/perf.ts"
   },
