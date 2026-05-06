@@ -19,7 +19,7 @@ export const campaignsRouter = Router();
 campaignsRouter.use(requireAuth);
 
 const RecipientSchema = z.object({
-  email: z.string().email(),
+  email: z.string().min(1),
   firstName: z.string().nullish(),
   lastName: z.string().nullish(),
   data: z.record(z.unknown()).optional(),
