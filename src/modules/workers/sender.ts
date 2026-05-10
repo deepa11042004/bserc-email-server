@@ -2,6 +2,7 @@ import { appPool } from '../../db/pools.js';
 import { logger } from '../../common/logger.js';
 import {
   deleteJob,
+  extendVisibility,
   receiveJobs,
   type EmailJob,
   type ReceivedJob,
@@ -174,7 +175,11 @@ async function processOne(received: ReceivedJob): Promise<void> {
   }
   const { recipient, campaign, template } = ctx;
 
-  if (campaign.status === 'PAUSED') return;
+  if (campaign.status === 'PAUSED') {
+    // Keep the job in SQS but push visibility out so we re-check after 60 s.
+    await extendVisibility(receiptHandle, 60);
+    return;
+  }
   if (['CANCELLED', 'COMPLETED', 'FAILED'].includes(campaign.status)) {
     await deleteJob(receiptHandle);
     return;
