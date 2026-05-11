@@ -1,5 +1,12 @@
 import { Router } from 'express';
-import { GetQueueAttributesCommand } from '@aws-sdk/client-sqs';
+import {
+  GetQueueAttributesCommand,
+  StartMessageMoveTaskCommand,
+  ListMessageMoveTasksCommand,
+  ReceiveMessageCommand,
+  DeleteMessageCommand,
+  SendMessageBatchCommand,
+} from '@aws-sdk/client-sqs';
 import { asyncHandler } from '../../common/asyncHandler.js';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { sqs } from '../aws/clients.js';
@@ -222,5 +229,92 @@ adminRouter.post(
       [ids.length, campaignId]
     );
     res.json({ campaignId, retried: ids.length });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// DLQ redrive — move all DLQ messages back to the main queue via AWS native
+// StartMessageMoveTask. Returns a taskHandle you can poll with GET /redrive-dlq.
+// ---------------------------------------------------------------------------
+adminRouter.post(
+  '/redrive-dlq',
+  requireRole('ADMIN'),
+  asyncHandler(async (_req, res) => {
+    if (!env.SQS_DLQ_URL || !env.SQS_QUEUE_URL) {
+      return res.status(503).json({ error: 'SQS_DLQ_URL or SQS_QUEUE_URL not configured' });
+    }
+
+    // Fetch ARNs — StartMessageMoveTask requires ARNs not URLs.
+    const [dlqAttrs, mainAttrs] = await Promise.all([
+      sqs().send(new GetQueueAttributesCommand({ QueueUrl: env.SQS_DLQ_URL, AttributeNames: ['QueueArn'] })),
+      sqs().send(new GetQueueAttributesCommand({ QueueUrl: env.SQS_QUEUE_URL, AttributeNames: ['QueueArn'] })),
+    ]);
+    const dlqArn = dlqAttrs.Attributes?.QueueArn;
+    const mainArn = mainAttrs.Attributes?.QueueArn;
+    if (!dlqArn || !mainArn) {
+      return res.status(500).json({ error: 'Could not resolve queue ARNs' });
+    }
+
+    const out = await sqs().send(
+      new StartMessageMoveTaskCommand({ SourceArn: dlqArn, DestinationArn: mainArn })
+    );
+    res.json({ taskHandle: out.TaskHandle, message: 'DLQ redrive started — messages are moving to main queue' });
+  })
+);
+
+// GET /redrive-dlq — check status of the last redrive task.
+adminRouter.get(
+  '/redrive-dlq',
+  requireRole('ADMIN'),
+  asyncHandler(async (_req, res) => {
+    if (!env.SQS_DLQ_URL) {
+      return res.status(503).json({ error: 'SQS_DLQ_URL not configured' });
+    }
+    const dlqAttrs = await sqs().send(
+      new GetQueueAttributesCommand({ QueueUrl: env.SQS_DLQ_URL, AttributeNames: ['QueueArn'] })
+    );
+    const dlqArn = dlqAttrs.Attributes?.QueueArn;
+    const tasks = await sqs().send(new ListMessageMoveTasksCommand({ SourceArn: dlqArn }));
+    res.json({ tasks: tasks.Results ?? [] });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Re-enqueue stuck QUEUED recipients — for cases where the SQS message was
+// lost (e.g. went to DLQ and got dropped) but the DB record is still QUEUED.
+// Finds all QUEUED recipients for a campaign and pushes them back into SQS.
+// ---------------------------------------------------------------------------
+adminRouter.post(
+  '/requeue-stuck/:campaignId',
+  requireRole('ADMIN', 'OPERATOR'),
+  asyncHandler(async (req, res) => {
+    const campaignId = Number(req.params.campaignId);
+    const [rows]: any = await appPool().query(
+      `SELECT id FROM campaign_recipients WHERE campaign_id = ? AND status IN ('QUEUED','PENDING')`,
+      [campaignId]
+    );
+    if (!rows.length) return res.json({ campaignId, requeued: 0 });
+
+    const ids = rows.map((r: any) => r.id as number);
+
+    // Reset retry counter so they get a clean 5 retries.
+    for (let i = 0; i < ids.length; i += 1000) {
+      const part = ids.slice(i, i + 1000);
+      await appPool().query(
+        `UPDATE campaign_recipients
+            SET status='QUEUED', error_reason=NULL, retry_count=0, queued_at=NOW()
+          WHERE id IN (${part.map(() => '?').join(',')})`,
+        part
+      );
+    }
+
+    // Ensure campaign is RUNNING so the worker picks them up.
+    await appPool().query(
+      `UPDATE campaigns SET status='RUNNING' WHERE id = ? AND status IN ('QUEUED','PAUSED','RUNNING')`,
+      [campaignId]
+    );
+
+    await enqueueJobs(ids.map((id: number) => ({ campaignId, recipientId: id })));
+    res.json({ campaignId, requeued: ids.length });
   })
 );
