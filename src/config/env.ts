@@ -35,6 +35,16 @@ const schema = z.object({
   SQS_QUEUE_URL: z.string().optional(),
   SQS_DLQ_URL: z.string().optional(),
 
+  CERT_QUEUE_NAME: z.string().default('bserc-cert-render'),
+  CERT_DLQ_NAME: z.string().default('bserc-cert-render-dlq'),
+  CERT_QUEUE_URL: z.string().optional(),
+  CERT_DLQ_URL: z.string().optional(),
+  CERT_VERIFY_BASE_URL: z.string().default('http://localhost:3000/verify'),
+  CERT_WORKER_CONCURRENCY: z.coerce.number().default(4),
+  CERT_WORKER_BATCH_SIZE: z.coerce.number().min(1).max(10).default(5),
+  CERT_WORKER_VISIBILITY_TIMEOUT_SEC: z.coerce.number().default(180),
+  CERT_MAX_RETRIES: z.coerce.number().default(3),
+
   SNS_TOPIC_NAME: z.string(),
   SNS_TOPIC_ARN: z.string().optional(),
 

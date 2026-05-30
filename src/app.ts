@@ -12,6 +12,9 @@ import { campaignsRouter } from './modules/campaigns/campaigns.routes.js';
 import { suppressionRouter } from './modules/suppression/suppression.routes.js';
 import { adminRouter } from './modules/admin/admin.routes.js';
 import { sendersRouter } from './modules/senders/senders.routes.js';
+import { certTemplatesRouter } from './modules/certificates/cert-templates.routes.js';
+import { certBatchesRouter } from './modules/certificates/cert-batches.routes.js';
+import { certPublicRouter } from './modules/certificates/cert-public.routes.js';
 import { webhookRouter } from './modules/webhooks/ses.webhook.js';
 import { mountSwagger } from './openapi/swagger.js';
 import { appPool } from './db/pools.js';
@@ -32,7 +35,8 @@ export const buildApp = (): Express => {
   // Webhook router uses its own permissive parser; mount before global JSON.
   app.use(env.WEBHOOK_PATH, webhookRouter);
 
-  app.use(express.json({ limit: '20mb' }));
+  // 75mb accommodates ~50mb participant spreadsheets uploaded as base64 in JSON.
+  app.use(express.json({ limit: '75mb' }));
 
   // Health endpoints
   app.get('/live', (_req: Request, res: Response) => {
@@ -72,6 +76,9 @@ export const buildApp = (): Express => {
   app.use('/api/campaigns', campaignsRouter);
   app.use('/api/suppression', suppressionRouter);
   app.use('/api/senders', sendersRouter);
+  app.use('/api/cert-templates', certTemplatesRouter);
+  app.use('/api/cert-batches', certBatchesRouter);
+  app.use('/api/public/cert', certPublicRouter);
   app.use('/api/admin', adminRouter);
 
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
