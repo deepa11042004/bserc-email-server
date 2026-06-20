@@ -1,0 +1,17 @@
+node_modules/
+dist/
+tests/
+docs/
+.github/
+.claude/
+.env
+.env.*
+*.log
+.DS_Store
+coverage/
+.idea/
+.vscode/
+README.md
+TROUBLESHOOTING.md
+postman_collection.json
+docker-compose.yml

@@ -14,5 +14,4 @@ RUN npm install --omit=dev --no-audit --no-fund
 COPY --from=build /app/dist ./dist
 COPY src/db/migrations ./dist/db/migrations
 EXPOSE 4000
-# Default: API. Override with `worker` to run the consumer.
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/start-all.js"]

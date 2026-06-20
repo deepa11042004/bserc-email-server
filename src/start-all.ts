@@ -35,8 +35,9 @@ function start(label: string, script: string) {
 
 const server = start('server', 'dist/server.js');
 const worker = start('worker', 'dist/worker.js');
+const certWorker = start('cert-worker', 'dist/cert-worker.js');
 
-console.log('[start-all] both server and worker are running');
+console.log('[start-all] server, worker, and cert-worker are running');
 
 function shutdown() {
   if (shuttingDown) return;
@@ -44,6 +45,7 @@ function shutdown() {
   console.log('[start-all] shutting down...');
   server.kill('SIGTERM');
   worker.kill('SIGTERM');
+  certWorker.kill('SIGTERM');
 }
 
 process.on('SIGTERM', shutdown);

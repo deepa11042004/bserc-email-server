@@ -63,13 +63,25 @@ const loop = async (): Promise<void> => {
     },
     'Cert worker started'
   );
+  let consecutiveErrors = 0;
   while (running) {
     if (inFlight >= env.CERT_WORKER_CONCURRENCY) {
       await new Promise((r) => setTimeout(r, 100));
       continue;
     }
     const want = Math.max(1, env.CERT_WORKER_CONCURRENCY - inFlight);
-    const messages = await receiveCertJobs(Math.min(want, env.CERT_WORKER_BATCH_SIZE));
+    let messages: ReceivedCertJob[] = [];
+    try {
+      messages = await receiveCertJobs(Math.min(want, env.CERT_WORKER_BATCH_SIZE));
+      consecutiveErrors = 0;  // Reset on success
+    } catch (e) {
+      consecutiveErrors++;
+      // Exponential backoff: 2s, 4s, 8s, 16s, 32s (capped)
+      const delayMs = Math.min(2000 * Math.pow(2, consecutiveErrors - 1), 60000);
+      logger.error({ err: e, consecutiveErrors, nextRetryMs: delayMs }, 'SQS receive failed (cert-worker)');
+      await new Promise((r) => setTimeout(r, delayMs));
+      continue;
+    }
     if (!messages.length) continue;
     for (const m of messages) {
       inFlight++;

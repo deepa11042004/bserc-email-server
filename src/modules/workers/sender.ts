@@ -254,6 +254,7 @@ async function processOne(received: ReceivedJob): Promise<void> {
 export async function workerLoop(opts: { concurrency: number; signal: AbortSignal }) {
   const { concurrency, signal } = opts;
   const inFlight = new Set<Promise<void>>();
+  let consecutiveErrors = 0;
   logger.info({ concurrency }, 'Worker started');
 
   while (!signal.aborted) {
@@ -264,9 +265,13 @@ export async function workerLoop(opts: { concurrency: number; signal: AbortSigna
     let received: ReceivedJob[] = [];
     try {
       received = await receiveJobs(env.WORKER_BATCH_SIZE);
+      consecutiveErrors = 0;  // Reset on success
     } catch (e) {
-      logger.error({ err: e }, 'SQS receive failed');
-      await new Promise((r) => setTimeout(r, 2000));
+      consecutiveErrors++;
+      // Exponential backoff: 2s, 4s, 8s, 16s, 32s (capped)
+      const delayMs = Math.min(2000 * Math.pow(2, consecutiveErrors - 1), 60000);
+      logger.error({ err: e, consecutiveErrors, nextRetryMs: delayMs }, 'SQS receive failed');
+      await new Promise((r) => setTimeout(r, delayMs));
       continue;
     }
     if (!received.length) continue;

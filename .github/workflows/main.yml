@@ -1,0 +1,106 @@
+name: Deploy Email Server to EC2
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2️⃣ Setup Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3️⃣ Login to Docker Hub
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # 4️⃣ Remove old image
+      - name: Remove old Docker image
+        run: |
+          docker rmi ${{ secrets.DOCKER_USERNAME }}/bserc-email-server:latest || true
+
+      # 5️⃣ Build & Push
+      - name: Build & Push Docker image
+        run: |
+          docker buildx build \
+          --no-cache \
+          --platform linux/amd64 \
+          -t ${{ secrets.DOCKER_USERNAME }}/bserc-email-server:latest \
+          --push .
+
+      # 6️⃣ Deploy to EC2
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            # Stop old container
+            docker stop email-server || true
+            docker rm email-server || true
+
+            # Remove old image
+            docker rmi ${{ secrets.DOCKER_USERNAME }}/bserc-email-server:latest || true
+
+            # Pull fresh image
+            docker pull ${{ secrets.DOCKER_USERNAME }}/bserc-email-server:latest
+
+            # Free port 4000
+            sudo fuser -k 4000/tcp || true
+
+            # Run single container with all processes
+            docker run -d -p 4000:4000 \
+            --name email-server \
+            -e NODE_ENV=production \
+            -e PORT=4000 \
+            -e LOG_LEVEL=${{ secrets.EMAIL_LOG_LEVEL }} \
+            -e JWT_SECRET=${{ secrets.EMAIL_JWT_SECRET }} \
+            -e JWT_EXPIRES_IN=12h \
+            -e SOURCE_DB_HOST=${{ secrets.EMAIL_SOURCE_DB_HOST }} \
+            -e SOURCE_DB_PORT=${{ secrets.EMAIL_SOURCE_DB_PORT }} \
+            -e SOURCE_DB_USER=${{ secrets.EMAIL_SOURCE_DB_USER }} \
+            -e SOURCE_DB_PASSWORD=${{ secrets.EMAIL_SOURCE_DB_PASSWORD }} \
+            -e SOURCE_DB_NAME=${{ secrets.EMAIL_SOURCE_DB_NAME }} \
+            -e APP_DB_HOST=${{ secrets.EMAIL_APP_DB_HOST }} \
+            -e APP_DB_PORT=${{ secrets.EMAIL_APP_DB_PORT }} \
+            -e APP_DB_USER=${{ secrets.EMAIL_APP_DB_USER }} \
+            -e APP_DB_PASSWORD=${{ secrets.EMAIL_APP_DB_PASSWORD }} \
+            -e APP_DB_NAME=${{ secrets.EMAIL_APP_DB_NAME }} \
+            -e AWS_REGION=${{ secrets.EMAIL_AWS_REGION }} \
+            -e AWS_ACCESS_KEY_ID=${{ secrets.EMAIL_AWS_ACCESS_KEY_ID }} \
+            -e AWS_SECRET_ACCESS_KEY=${{ secrets.EMAIL_AWS_SECRET_ACCESS_KEY }} \
+            -e AWS_S3_BUCKET=${{ secrets.EMAIL_AWS_S3_BUCKET }} \
+            -e SES_DEFAULT_FROM_EMAIL=${{ secrets.EMAIL_SES_DEFAULT_FROM_EMAIL }} \
+            -e SES_CONFIGURATION_SET=${{ secrets.EMAIL_SES_CONFIGURATION_SET }} \
+            -e SES_MAX_SEND_RATE_PER_SEC=${{ secrets.EMAIL_SES_MAX_SEND_RATE_PER_SEC }} \
+            -e SQS_QUEUE_NAME=${{ secrets.EMAIL_SQS_QUEUE_NAME }} \
+            -e SQS_DLQ_NAME=${{ secrets.EMAIL_SQS_DLQ_NAME }} \
+            -e SQS_QUEUE_URL=${{ secrets.EMAIL_SQS_QUEUE_URL }} \
+            -e SQS_DLQ_URL=${{ secrets.EMAIL_SQS_DLQ_URL }} \
+            -e CERT_QUEUE_URL=${{ secrets.EMAIL_CERT_QUEUE_URL }} \
+            -e CERT_DLQ_URL=${{ secrets.EMAIL_CERT_DLQ_URL }} \
+            -e CERT_VERIFY_BASE_URL=${{ secrets.EMAIL_CERT_VERIFY_BASE_URL }} \
+            -e SNS_TOPIC_NAME=${{ secrets.EMAIL_SNS_TOPIC_NAME }} \
+            -e SNS_TOPIC_ARN=${{ secrets.EMAIL_SNS_TOPIC_ARN }} \
+            -e WORKER_CONCURRENCY=${{ secrets.EMAIL_WORKER_CONCURRENCY }} \
+            -e WORKER_BATCH_SIZE=${{ secrets.EMAIL_WORKER_BATCH_SIZE }} \
+            -e WORKER_VISIBILITY_TIMEOUT_SEC=${{ secrets.EMAIL_WORKER_VISIBILITY_TIMEOUT_SEC }} \
+            -e ALLOWED_RECIPIENT_TABLES=${{ secrets.EMAIL_ALLOWED_RECIPIENT_TABLES }} \
+            -e ALLOW_RAW_QUERY=${{ secrets.EMAIL_ALLOW_RAW_QUERY }} \
+            -e WEBHOOK_PATH=${{ secrets.EMAIL_WEBHOOK_PATH }} \
+            ${{ secrets.DOCKER_USERNAME }}/bserc-email-server:latest
+
+            # Cleanup unused images
+            docker image prune -af || true
