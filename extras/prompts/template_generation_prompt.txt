@@ -1,0 +1,8 @@
+I have to prepare a new email template that will be used to send the certificate of the Cyber Security Day event but this will work in collaboration with the certificate system.
+But this will work in collaboration with the certificate system. The certificate system will send the certificate URL or certificate ID in some cases. That will be consumed by the email template and later on we will send email using that template.
+I have one reference that we already created last time when we were delivering the offer letter. Just use that reference with the new content I am providing you.
+
+
+reference email template - 
+
+new contect - 
